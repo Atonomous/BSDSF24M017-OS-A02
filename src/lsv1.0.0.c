@@ -19,6 +19,13 @@
 #include <time.h>
 #include <sys/ioctl.h>
 
+#define COLOR_RESET   "\033[0m"
+#define COLOR_BLUE    "\033[1;34m"
+#define COLOR_GREEN   "\033[1;32m"
+#define COLOR_RED     "\033[1;31m"
+#define COLOR_PINK    "\033[1;35m"
+#define COLOR_REVERSE "\033[7m"
+
 extern int errno;
 
 enum DisplayMode {
@@ -33,9 +40,11 @@ int get_terminal_width(void);
 void mode_to_letters(int mode, char str[]);
 void print_long_entry(const char *dir, const char *name);
 void do_ls(const char *dir);
-void print_down_then_across(char **names, int count, int term_width, int max_len);
-void print_horizontal(char **names, int count, int term_width, int max_len);
+void print_down_then_across(const char *dir, char **names, int count, int term_width, int max_len);
+void print_horizontal(const char *dir, char **names, int count, int term_width, int max_len);
 int compare_filenames(const void *a, const void *b);
+int is_archive(const char *name);
+void print_colored_name(const char *dir, const char *name);
 
 
 int main(int argc, char *argv[])
@@ -134,13 +143,13 @@ void do_ls(const char *dir)
     else if (display_mode == MODE_HORIZONTAL)
     {
         int term_width = get_terminal_width();
-        print_horizontal(names, count, term_width, max_len);
+        print_horizontal(dir, names, count, term_width, max_len);
     }
     // Feature 3: Down-then-across column display
     else
     {
         int term_width = get_terminal_width();
-        print_down_then_across(names, count, term_width, max_len);
+        print_down_then_across(dir, names, count, term_width, max_len);
     }
 
     // Free memory
@@ -152,7 +161,7 @@ void do_ls(const char *dir)
 }
 
 
-void print_down_then_across(char **names, int count, int term_width, int max_len) {
+void print_down_then_across(const char *dir, char **names, int count, int term_width, int max_len) {
     int spacing = 2;
     int col_width = max_len + spacing;
     int num_cols = term_width / col_width;
@@ -163,29 +172,31 @@ void print_down_then_across(char **names, int count, int term_width, int max_len
         for (int c = 0; c < num_cols; c++) {
             int idx = c * num_rows + r;
             if (idx < count) {
-                if (c == num_cols - 1 || idx + num_rows >= count) {
-                    printf("%s", names[idx]);
-                } else {
-                    printf("%-*s", col_width, names[idx]);
+                print_colored_name(dir, names[idx]);
+                if (c < num_cols - 1 && idx + num_rows < count) {
+                    int pad = col_width - strlen(names[idx]);
+                    for (int s = 0; s < pad; s++) putchar(' ');
                 }
             }
         }
-        printf("\n");
+        putchar('\n');
     }
 }
 
-void print_horizontal(char **names, int count, int term_width, int max_len) {
+void print_horizontal(const char *dir, char **names, int count, int term_width, int max_len) {
     int col_width = max_len + 2;
     int cur_x = 0;
     for (int i = 0; i < count; i++) {
         if (cur_x + col_width > term_width && cur_x > 0) {
-            printf("\n");
+            putchar('\n');
             cur_x = 0;
         }
-        printf("%-*s", col_width, names[i]);
+        print_colored_name(dir, names[i]);
+        int pad = col_width - strlen(names[i]);
+        for (int s = 0; s < pad; s++) putchar(' ');
         cur_x += col_width;
     }
-    if (cur_x > 0) printf("\n");
+    if (cur_x > 0) putchar('\n');
 }
 
 
@@ -195,6 +206,37 @@ int compare_filenames(const void *a, const void *b) {
     return strcmp(str1, str2);
 }
 
+int is_archive(const char *name) {
+    int len = strlen(name);
+    if (len >= 4 && (strcmp(name + len - 4, ".tar") == 0 || strcmp(name + len - 4, ".zip") == 0)) return 1;
+    if (len >= 3 && strcmp(name + len - 3, ".gz") == 0) return 1;
+    return 0;
+}
+
+void print_colored_name(const char *dir, const char *name) {
+    char fullpath[1024];
+    if (strcmp(dir, "/") == 0) snprintf(fullpath, sizeof(fullpath), "/%s", name);
+    else snprintf(fullpath, sizeof(fullpath), "%s/%s", dir, name);
+
+    struct stat st;
+    if (lstat(fullpath, &st) == -1) {
+        printf("%s", name);
+        return;
+    }
+
+    if (S_ISLNK(st.st_mode))
+        printf("%s%s%s", COLOR_PINK, name, COLOR_RESET);
+    else if (S_ISDIR(st.st_mode))
+        printf("%s%s%s", COLOR_BLUE, name, COLOR_RESET);
+    else if (is_archive(name))
+        printf("%s%s%s", COLOR_RED, name, COLOR_RESET);
+    else if (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))
+        printf("%s%s%s", COLOR_GREEN, name, COLOR_RESET);
+    else if (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode) || S_ISFIFO(st.st_mode) || S_ISSOCK(st.st_mode))
+        printf("%s%s%s", COLOR_REVERSE, name, COLOR_RESET);
+    else
+        printf("%s", name);
+}
 
 void print_long_entry(const char *dir, const char *name) {
     char fullpath[1024];
@@ -229,9 +271,11 @@ void print_long_entry(const char *dir, const char *name) {
         strcpy(date_buf, "Unknown date");
     }
 
-    printf("%s %2ld %-8s %-8s %8ld %s %s\n",
+    printf("%s %2ld %-8s %-8s %8ld %s ",
            modestr, (long)st.st_nlink, uname, gname,
-           (long)st.st_size, date_buf, name);
+           (long)st.st_size, date_buf);
+    print_colored_name(dir, name);
+    putchar('\n');
 }
 
 
