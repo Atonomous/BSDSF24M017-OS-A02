@@ -35,6 +35,7 @@ void print_long_entry(const char *dir, const char *name);
 void do_ls(const char *dir);
 void print_down_then_across(char **names, int count, int term_width, int max_len);
 void print_horizontal(char **names, int count, int term_width, int max_len);
+int compare_filenames(const void *a, const void *b);
 
 
 int main(int argc, char *argv[])
@@ -118,6 +119,9 @@ void do_ls(const char *dir)
     }
     closedir(dp);
 
+    // Sort entries alphabetically
+    qsort(names, count, sizeof(char *), compare_filenames);
+
     // Feature 2: -l long listing
     if (display_mode == MODE_LONG)
     {
@@ -183,6 +187,14 @@ void print_horizontal(char **names, int count, int term_width, int max_len) {
     }
     if (cur_x > 0) printf("\n");
 }
+
+
+int compare_filenames(const void *a, const void *b) {
+    const char *str1 = *(const char **)a;
+    const char *str2 = *(const char **)b;
+    return strcmp(str1, str2);
+}
+
 
 void print_long_entry(const char *dir, const char *name) {
     char fullpath[1024];
