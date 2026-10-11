@@ -20,27 +20,38 @@
 #include <sys/ioctl.h>
 
 extern int errno;
-int flag_l = 0;
+
+enum DisplayMode {
+    MODE_VERTICAL,
+    MODE_LONG,
+    MODE_HORIZONTAL
+};
+
+enum DisplayMode display_mode = MODE_VERTICAL;
 
 int get_terminal_width(void);
 void mode_to_letters(int mode, char str[]);
 void print_long_entry(const char *dir, const char *name);
 void do_ls(const char *dir);
 void print_down_then_across(char **names, int count, int term_width, int max_len);
+void print_horizontal(char **names, int count, int term_width, int max_len);
 
 
 int main(int argc, char *argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "l")) != -1)
+    while ((opt = getopt(argc, argv, "lx")) != -1)
     {
         switch (opt)
         {
         case 'l':
-            flag_l = 1;
+            display_mode = MODE_LONG;
+            break;
+        case 'x':
+            display_mode = MODE_HORIZONTAL;
             break;
         default:
-            fprintf(stderr, "Usage: %s [-l] [directory...]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-l] [-x] [directory...]\n", argv[0]);
             exit(EXIT_FAILURE);
         }
     }
@@ -108,12 +119,18 @@ void do_ls(const char *dir)
     closedir(dp);
 
     // Feature 2: -l long listing
-    if (flag_l)
+    if (display_mode == MODE_LONG)
     {
         for (int i = 0; i < count; i++)
         {
             print_long_entry(dir, names[i]);
         }
+    }
+    // Feature 4: -x horizontal listing
+    else if (display_mode == MODE_HORIZONTAL)
+    {
+        int term_width = get_terminal_width();
+        print_horizontal(names, count, term_width, max_len);
     }
     // Feature 3: Down-then-across column display
     else
@@ -151,6 +168,20 @@ void print_down_then_across(char **names, int count, int term_width, int max_len
         }
         printf("\n");
     }
+}
+
+void print_horizontal(char **names, int count, int term_width, int max_len) {
+    int col_width = max_len + 2;
+    int cur_x = 0;
+    for (int i = 0; i < count; i++) {
+        if (cur_x + col_width > term_width && cur_x > 0) {
+            printf("\n");
+            cur_x = 0;
+        }
+        printf("%-*s", col_width, names[i]);
+        cur_x += col_width;
+    }
+    if (cur_x > 0) printf("\n");
 }
 
 void print_long_entry(const char *dir, const char *name) {
