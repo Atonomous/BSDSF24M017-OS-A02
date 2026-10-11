@@ -35,6 +35,7 @@ enum DisplayMode {
 };
 
 enum DisplayMode display_mode = MODE_VERTICAL;
+int flag_R = 0;
 
 int get_terminal_width(void);
 void mode_to_letters(int mode, char str[]);
@@ -50,7 +51,7 @@ void print_colored_name(const char *dir, const char *name);
 int main(int argc, char *argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "lx")) != -1)
+    while ((opt = getopt(argc, argv, "lxR")) != -1)
     {
         switch (opt)
         {
@@ -60,8 +61,11 @@ int main(int argc, char *argv[])
         case 'x':
             display_mode = MODE_HORIZONTAL;
             break;
+        case 'R':
+            flag_R = 1;
+            break;
         default:
-            fprintf(stderr, "Usage: %s [-l] [-x] [directory...]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-l] [-x] [-R] [directory...]\n", argv[0]);
             exit(EXIT_FAILURE);
         }
     }
@@ -74,9 +78,9 @@ int main(int argc, char *argv[])
     {
         for (int i = optind; i < argc; i++)
         {
-            if (argc - optind > 1)
+            if (argc - optind > 1 && !flag_R)
             {
-                printf("Directory listing of %s : \n", argv[i]);
+                printf("%s:\n", argv[i]);
             }
             do_ls(argv[i]);
             if (i < argc - 1)
@@ -96,7 +100,10 @@ void do_ls(const char *dir)
         fprintf(stderr, "Cannot open directory : %s\n", dir);
         return;
     }
-
+    if (flag_R)
+    {
+        printf("%s:\n", dir);
+    }
     int capacity = 64;
     int count = 0;
     char **names = malloc(capacity * sizeof(char *));
@@ -150,6 +157,26 @@ void do_ls(const char *dir)
     {
         int term_width = get_terminal_width();
         print_down_then_across(dir, names, count, term_width, max_len);
+    }
+
+    // Recursive traversal if -R enabled
+    if (flag_R)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            char subpath[1024];
+            if (strcmp(dir, "/") == 0)
+                snprintf(subpath, sizeof(subpath), "/%s", names[i]);
+            else
+                snprintf(subpath, sizeof(subpath), "%s/%s", dir, names[i]);
+
+            struct stat st;
+            if (lstat(subpath, &st) == 0 && S_ISDIR(st.st_mode))
+            {
+                putchar('\n');
+                do_ls(subpath);
+            }
+        }
     }
 
     // Free memory
